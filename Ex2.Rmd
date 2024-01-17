@@ -1,0 +1,169 @@
+---
+title: "Ex2"
+output: pdf_document
+date: "2023-10-06"
+toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=TRUE}
+set.seed(12208877)
+```
+
+# 1.Summarise the concept of pseudo-random number generation with Linear Congruential Random Number Generation Algorithm using the available code examples from the course to create a working code example and simulate one pseudo-random sample.
+```{r, echo=TRUE}
+mc.gen <- function(n,m,a,c=0,x0)
+{
+  us <- numeric(n)
+  for (i in 1:n)
+  {
+    x0 <- (a*x0+c) %% m
+    us[i] <- x0 / m
+  }
+  return(us)
+}
+```
+
+```{r, echo=TRUE}
+round(mc.gen(1, 41, 6, 0, 12208877), 4)
+```
+We create the numbers as described in the slide. The conditions of n<m and m - prime number are fulfilled. The numbers look random. 
+```{r, echo=TRUE}
+round(mc.gen(8, 17, 3, 0, 12208877), 4)
+```
+
+Now, we try it with m being not a prime number - there are only 3 unique numbers, then they cycle.
+```{r, echo=TRUE}
+round(mc.gen(8, 18, 4, 0, 12208877), 4)
+```
+
+In the code chunk below, we put m that is smaller than n. In this case only 4 numbers are unique, others are again repeated.
+```{r, echo=TRUE}
+round(mc.gen(8, 5, 3, 0, 12208877), 4)
+```
+Below we changed the a from 3 to 4, and we can see that the cycling happens sooner than m.
+```{r, echo=TRUE}
+round(mc.gen(8, 17, 4, 0, 12208877), 4)
+```
+# 2.The exponential distribution
+The formula to obtain x out of cdf:
+
+$f(x) = 1-e^{ -\lambda x}$ 
+
+$y = 1-e^{ -\lambda x}$ 
+
+$y-1 = -e^{ -\lambda x}$ 
+
+$1-y= e^{-\lambda x}$  
+
+$ln(1-y) = -\lambda x$
+
+$\frac{ln(1-y)}{-\lambda} = x$
+
+```{r}
+set.seed(12208877)
+gen_ex <- function(n, lambda) {
+  numbers <- runif(n, min = 0, max = 1)
+  log(1-numbers)/ (-lambda)
+} 
+
+gen1 <- gen_ex(1000, 41)
+gen2 <- gen_ex(1000, 17)
+gen3 <- gen_ex(1000, 12208877)
+
+qqplot(x=qexp(ppoints(1000)), y=gen1, main="Exponential Q-Q Plot. Lambda 41",
+       xlab="Theoretical Quantiles", ylab= "Sample Quantiles")
+qqline(gen1, distribution=qexp, col = "red")
+
+qqplot(x=qexp(ppoints(1000)), y=gen2, main="Exponential Q-Q Plot. Lambda 17",
+       xlab="Theoretical Quantiles", ylab= "Sample Quantiles")
+qqline(gen2, distribution=qexp, col = "red")
+
+qqplot(x=qexp(ppoints(1000)), y=gen3, main="Exponential Q-Q Plot. Lambda 12208877",
+       xlab="Theoretical Quantiles", ylab= "Sample Quantiles")
+qqline(gen3, distribution=qexp, col = "red")
+```
+We can observe some outliers starting from the 4th theoretical quantile, but up to this point the generated numbers are close to exponential distribution.
+
+# 3.The Beta distribution.
+
+## Natural candidate
+
+For the rejection method we should take a function that will be slightly higher that ours, but still provide a good acceptance rate. For that purpose we can take uniform distribution, since others may be too adaptive and flexible in terms of form. Also in this case we can easily find the value of `c` that corresponds to the maximum value of our function, that will give us the highest acceptance rate.
+
+## Case alpha = 2, beta = 2
+Firstly, let's calculate the coefficient in pdf:
+```{r, echo=TRUE}
+calc_coeff <- function(a, b){
+  gamma(a + b) / (gamma(a) * gamma(b))
+}
+calc_coeff(2,2)
+```
+$f(x;2,2) = 6x(1-x) = -6x^2 + 6x$
+
+Since the obtained function is a simple quadratic one with 1 spike (and is reversed since we have -6x^2), we can find the maximum of it. From this point we will have the smallest difference with uniform distribution.
+
+$f'(x) = -12x + 6$ -> first derivation. x = 0.5
+
+$f(0.5,2,2) = 1.5$ -> the function maximum.
+
+Hence, c>1.5
+
+## General case
+
+For the general case, we can determine `c` by the mode of our distribution, that way we ensure that we use the maximum point to determine `c`, which will give the highest acceptance rate.
+
+```{r, echo=TRUE}
+gen_beta <- function(a, b, x){
+  calc_coeff(a,b)*x^(a-1)*((1-x)^(b-1))
+}
+
+rbeta <- function(n, a, b) {
+  accepted <- 0
+  x <- numeric(n)
+  mode <- (a - 1) / (a + b - 2)
+  iter <- 0
+  c <- gen_beta(a, b, mode)
+  while(accepted<n){
+    iter <- iter +1
+    u <- runif(1)
+    y <- runif(1)
+    acceptance_prob <- dbeta(y, a, b) / (c*dunif(y))
+
+    if (u <= acceptance_prob) {
+      accepted <- accepted + 1
+      x[accepted] <- y
+    }
+  }
+  print(accepted/iter)
+  x
+}
+```
+
+```{r, echo=TRUE}
+bsample1 <- rbeta(1000, 2, 2)
+bsample2 <- rbeta(1000, 40, 3)
+bsample3 <- rbeta(1000, 20, 45)
+
+qqplot(x=qbeta(ppoints(1000),2,2), y=bsample1, main="Beta Q-Q Plot: Alpha=2, Beta=2",
+       xlab="Theoretical Quantiles", ylab= "Generated Quantiles")
+qqline(bsample1, distribution=function(x){qbeta(x,2,2)}, col = "red")
+
+qqplot(x=qbeta(ppoints(1000),40,3), y=bsample2, main="Beta Q-Q Plot: Alpha=40, Beta=3",
+       xlab="Theoretical Quantiles", ylab= "Generated Quantiles")
+qqline(bsample2, distribution=function(x){qbeta(x,40,3)}, col = "red")
+
+qqplot(x=qbeta(ppoints(1000),20,45), y=bsample3, main="Beta Q-Q Plot - Alpha=85, Beta=97",
+       xlab="Theoretical Quantiles", ylab= "Generated Quantiles")
+qqline(bsample3, distribution=function(x){qbeta(x,20,45)}, col = "red")
+```
+Most of the generated data fits the beta distribution as can be observed in the plots.
+
+
+
+
+
+
